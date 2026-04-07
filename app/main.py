@@ -1,0 +1,17 @@
+from datetime import datetime, timezone
+
+from fastapi import FastAPI, Request
+
+app = FastAPI()
+
+
+@app.get("/")
+async def root(request: Request):
+    # Prefer X-Forwarded-For set by the load balancer; fall back to direct client host
+    forwarded_for = request.headers.get("x-forwarded-for")
+    ip = forwarded_for.split(",")[0].strip() if forwarded_for else request.client.host
+
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ip": ip,
+    }
