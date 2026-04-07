@@ -17,3 +17,8 @@ async def root(request: Request):
         "timestamp": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         "ip": ip,
     }
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
