@@ -39,6 +39,12 @@ jobs:
           cat response.json | grep -q "ip"
           echo "API response is valid"
 
+      - name: Test health endpoint
+        run: |
+          curl -f http://localhost:8080/health | tee health.json
+          cat health.json | grep -q "ok"
+          echo "Health endpoint is valid"
+
       - name: Verify non-root user
         run: |
           USER=$(docker exec simpletimeservice whoami)
