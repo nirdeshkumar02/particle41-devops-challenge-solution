@@ -45,25 +45,25 @@ variable "desired_count" {
 variable "min_capacity" {
   description = "Minimum number of tasks for autoscaling"
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "max_capacity" {
   description = "Maximum number of tasks for autoscaling"
   type        = number
-  default     = 10
+  default     = 5
 }
 
 variable "cpu_scale_threshold" {
-  description = "Target CPU utilisation percentage that triggers scale-out (e.g. 70 = scale when avg CPU > 70%)"
+  description = "Target CPU utilisation percentage that triggers scale-out"
   type        = number
-  default     = 70
+  default     = 60
 }
 
 variable "memory_scale_threshold" {
-  description = "Target memory utilisation percentage that triggers scale-out (e.g. 80 = scale when avg memory > 80%)"
+  description = "Target memory utilisation percentage that triggers scale-out"
   type        = number
-  default     = 80
+  default     = 60
 }
 
 variable "log_retention_days" {
