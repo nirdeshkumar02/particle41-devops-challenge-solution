@@ -25,55 +25,39 @@ variable "cost_center" {
   default     = "engineering"
 }
 
-# ── Networking ─────────────────────────────────────────────────────────────────
-
 variable "vpc_cidr" {
   description = "CIDR block for the VPC"
   type        = string
   default     = "10.0.0.0/16"
 }
 
-variable "availability_zone" {
-  description = "Primary AZ — NAT Gateway and first set of subnets live here"
-  type        = string
-  default     = "us-east-1a"
+variable "availability_zones" {
+  description = "List of AZs to deploy into — must contain exactly 2 entries"
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b"]
 }
 
-variable "availability_zone_secondary" {
-  description = "Secondary AZ — ALB and ECS tasks span both AZs for high availability"
-  type        = string
-  default     = "us-east-1b"
+variable "public_subnet_cidrs" {
+  description = "CIDR blocks for public subnets (one per AZ) — ALB and NAT Gateway live here"
+  type        = list(string)
+  default     = ["10.0.0.0/20", "10.0.16.0/20"]
 }
 
-variable "public_subnet_cidr" {
-  description = "CIDR for primary public subnet (ALB + NAT Gateway)"
-  type        = string
-  default     = "10.0.0.0/20"
+variable "private_subnet_cidrs" {
+  description = "CIDR blocks for private subnets (one per AZ) — ECS Fargate tasks run here"
+  type        = list(string)
+  default     = ["10.0.128.0/20", "10.0.144.0/20"]
 }
-
-variable "private_subnet_cidr" {
-  description = "CIDR for primary private subnet (ECS Fargate tasks)"
-  type        = string
-  default     = "10.0.128.0/20"
-}
-
-variable "public_subnet_secondary_cidr" {
-  description = "CIDR for secondary public subnet"
-  type        = string
-  default     = "10.0.16.0/20"
-}
-
-variable "private_subnet_secondary_cidr" {
-  description = "CIDR for secondary private subnet (ECS Fargate tasks)"
-  type        = string
-  default     = "10.0.144.0/20"
-}
-
-# ── Application ────────────────────────────────────────────────────────────────
 
 variable "container_image" {
   description = "Full container image reference including tag (e.g. nirdeshkumar02/simpletimeservice:0.0.1)"
   type        = string
+}
+
+variable "container_port" {
+  description = "Port the application container listens on"
+  type        = number
+  default     = 8080
 }
 
 variable "health_check_path" {
@@ -81,8 +65,6 @@ variable "health_check_path" {
   type        = string
   default     = "/health"
 }
-
-# ── ECS Fargate ────────────────────────────────────────────────────────────────
 
 variable "task_cpu" {
   description = "CPU units for the Fargate task (256 = 0.25 vCPU)"
@@ -105,25 +87,25 @@ variable "desired_count" {
 variable "min_capacity" {
   description = "Minimum number of tasks for autoscaling"
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "max_capacity" {
   description = "Maximum number of tasks for autoscaling"
   type        = number
-  default     = 10
+  default     = 5
 }
 
 variable "cpu_scale_threshold" {
   description = "Target CPU utilisation percentage that triggers ECS scale-out"
   type        = number
-  default     = 70
+  default     = 60
 }
 
 variable "memory_scale_threshold" {
   description = "Target memory utilisation percentage that triggers ECS scale-out"
   type        = number
-  default     = 80
+  default     = 60
 }
 
 variable "log_retention_days" {
