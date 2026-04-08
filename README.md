@@ -1,17 +1,17 @@
 # SimpleTimeService — Particle41 DevOps Challenge
 
-A minimal microservice that returns the current UTC+5:30 timestamp and the visitor's IP address,
-containerised and deployed to AWS ECS Fargate via Terraform.
+A minimal microservice that returns the current IST timestamp and the visitor's IP address,
+containerised with Docker and deployed to AWS ECS Fargate via Terraform.
 
 ---
 
-## What It Does
+## 1. Project Overview
 
 ```
 GET /
 ```
 ```json
-{ "timestamp": "2026-04-08 14:32:10", "ip": "203.0.113.45" }
+{ "timestamp": "2026-04-08T14:32:10.123456+05:30", "ip": "203.0.113.45" }
 ```
 
 ```
@@ -21,54 +21,42 @@ GET /health
 { "status": "ok" }
 ```
 
----
-
-## Repository Structure
-
-```
-.
-├── app/
-│   ├── main.py              # FastAPI microservice
-│   ├── requirements.txt     # Pinned dependencies
-│   └── Dockerfile           # Multi-stage Alpine build, non-root user
-└── terraform/               # Run terraform plan / apply from here
-    ├── modules/
-    │   ├── vpc/             # VPC, subnets, IGW, NAT Gateway, S3 endpoint
-    │   ├── security_groups/ # ALB and ECS task security groups
-    │   ├── iam/             # ECS task execution role and task role
-    │   ├── alb/             # Application Load Balancer, target group, listener
-    │   └── ecs/             # ECS cluster, Fargate task definition, service, autoscaling
-    ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
-    ├── locals.tf
-    ├── versions.tf          # Provider versions + backend config
-    └── terraform.tfvars     # Default variable values
-```
+The timestamp is ISO 8601 format in IST (UTC+5:30).
+The IP is extracted from the `X-Forwarded-For` header (set by the ALB) with a fallback to the direct client address.
 
 ---
 
-## Architecture
+## 2. Architecture Diagram
 
 ```
-                          ┌─────────────────────────────────────────────────────┐
-                          │  VPC  10.0.0.0/16          AWS / us-east-1          │
-                          │                                                      │
-  Internet ──── IGW ────► │  ┌──── us-east-1a ────┐  ┌──── us-east-1b ────┐   │
-                          │  │  Public Subnet      │  │  Public Subnet      │   │
-                          │  │  10.0.0.0/20        │  │  10.0.16.0/20       │   │
-                          │  │  [ ALB ]  [ NAT GW ]│  │  [ ALB ]            │   │
-                          │  └─────────────────────┘  └─────────────────────┘   │
-                          │           │                                          │
-                          │  ┌──── us-east-1a ────┐  ┌──── us-east-1b ────┐   │
-                          │  │  Private Subnet     │  │  Private Subnet     │   │
-                          │  │  10.0.128.0/20      │  │  10.0.144.0/20      │   │
-                          │  │  [ ECS Fargate ]    │  │  [ ECS Fargate ]    │   │
-                          │  └─────────────────────┘  └─────────────────────┘   │
-                          │           │                                          │
-                          │      NAT GW ──► Internet  (image pulls, AWS APIs)   │
-                          │      S3 VPC Endpoint      (ECR pulls — free)        │
-                          └─────────────────────────────────────────────────────┘
+                      Internet
+                          │
+                    ┌─────▼─────┐
+                    │    ALB    │  (public subnets, port 80)
+                    └─────┬─────┘
+                          │
+          ┌───────────────┴───────────────┐
+          │                               │
+   ┌──────▼──────┐                 ┌──────▼──────┐
+   │ us-east-1a  │                 │ us-east-1b  │
+   │ Private     │                 │ Private     │
+   │ Subnet      │                 │ Subnet      │
+   │             │                 │             │
+   │ ┌─────────┐ │                 │ ┌─────────┐ │
+   │ │ECS Task │ │                 │ │ECS Task │ │
+   │ │─────────│ │                 │ │─────────│ │
+   │ │app :8080│ │                 │ │app :8080│ │
+   │ │Fluent   │ │                 │ │Fluent   │ │
+   │ │Bit (log)│ │                 │ │Bit (log)│ │
+   │ └────┬────┘ │                 │ └────┬────┘ │
+   └──────┼──────┘                 └──────┼──────┘
+          │                               │
+          └──────── NAT Gateway ──────────┘
+                          │
+               ┌──────────▼──────────┐
+               │   CloudWatch Logs   │
+               │   /ecs/particle41-* │
+               └─────────────────────┘
 ```
 
 Each ECS task runs two containers:
@@ -76,19 +64,19 @@ Each ECS task runs two containers:
 | Container | Role |
 |---|---|
 | `simpletimeservice` | FastAPI app — serves `/` and `/health` on port 8080 |
-| `log_router` (Fluent Bit) | Sidecar — collects stdout/stderr and ships to CloudWatch Logs |
+| `log_router` (Fluent Bit) | Sidecar — routes stdout/stderr to CloudWatch Logs via FireLens |
 
-| Module | What it creates |
+| Terraform Module | What it creates |
 |---|---|
-| `vpc` | VPC, 4 subnets (2 public + 2 private across 2 AZs), IGW, NAT Gateway, route tables, S3 VPC endpoint |
-| `security_groups` | ALB SG (internet → :80), ECS task SG (ALB → :8080 + all outbound) |
-| `iam` | ECS task execution role (ECR pull + CloudWatch write), task role (Fluent Bit CloudWatch Logs) |
-| `alb` | Internet-facing ALB, listener on :80, target group with `/health` checks |
-| `ecs` | ECS cluster with Container Insights, Fargate task definition, ECS service, CPU/memory autoscaling |
+| `terraform-aws-modules/vpc` | VPC, 4 subnets (2 public + 2 private across 2 AZs), IGW, single NAT Gateway, route tables |
+| `modules/security_groups` | ALB SG (internet → :80), ECS task SG (ALB → container port only) |
+| `modules/iam` | ECS task execution role (ECR pull + CloudWatch write), task role (Fluent Bit logs) |
+| `modules/alb` | Internet-facing ALB, HTTP listener on :80, target group with `/health` checks |
+| `modules/ecs` | ECS cluster with Container Insights, Fargate task definition, ECS service with circuit breaker, CPU/memory autoscaling |
 
 ---
 
-## Why ECS Fargate — not EKS or VM+Docker
+## 3. Architecture Decision: Why ECS Fargate
 
 ### ECS Fargate vs EKS (Kubernetes)
 
@@ -100,9 +88,9 @@ Each ECS task runs two containers:
 | AWS integration | Native — IAM task roles, CloudWatch, ALB, App Autoscaling | Requires IRSA, LB Controller, OIDC setup |
 | Right for this workload | ✅ Single stateless service, simple scaling | ❌ Overkill — no inter-service mesh, no custom scheduling |
 
-Kubernetes adds value when you need pod scheduling policies, custom operators, or a multi-service ecosystem. SimpleTimeService is a single stateless HTTP service — ECS Fargate covers every requirement without the operational overhead.
+SimpleTimeService is a single stateless HTTP service. Kubernetes adds value when you need pod scheduling policies, custom operators, or a multi-service ecosystem — none of which apply here. ECS Fargate covers every requirement without the operational overhead.
 
-### ECS Fargate vs VM + Docker
+### ECS Fargate vs VM + Docker (EC2)
 
 | Concern | ECS Fargate | VM + Docker (EC2) |
 |---|---|---|
@@ -112,15 +100,130 @@ Kubernetes adds value when you need pod scheduling policies, custom operators, o
 | Security surface | No SSH, no persistent host OS | SSH attack surface, shared host vulnerabilities |
 | Failed-task recovery | ECS service controller restarts failed tasks | Requires systemd / Docker restart policies |
 
-Running Docker on EC2 means owning the OS: patching, availability groups, log agent installation, and process supervision — all to run one container. Fargate removes that entirely.
+Running Docker on EC2 means owning the OS: patching, availability groups, log agent installation, and process supervision — all to run one container. Fargate removes that entirely. A senior engineer's job is to choose the right tool for the job, not the most complex one.
 
 ---
 
-## Part 1 — Running the App Locally
+## 4. Prerequisites
 
-### Prerequisite
+| Tool | Version | Install |
+|---|---|---|
+| [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) | >= 2.x | `brew install awscli` |
+| [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.6.0 | `brew install terraform` |
+| [Docker](https://docs.docker.com/get-docker/) | >= 24.x | [docs.docker.com](https://docs.docker.com/get-docker/) |
+| Git | any | pre-installed on most systems |
 
-- [Docker](https://docs.docker.com/get-docker/) >= 24.x
+---
+
+## 5. AWS Authentication
+
+Configure credentials using any of the following methods:
+
+**Option A — AWS CLI (recommended for local development)**
+```bash
+aws configure
+# Enter: AWS Access Key ID, Secret Access Key, region (us-east-1), output format (json)
+```
+
+**Option B — Environment variables**
+```bash
+export AWS_ACCESS_KEY_ID=<your-key-id>
+export AWS_SECRET_ACCESS_KEY=<your-secret>
+export AWS_DEFAULT_REGION=us-east-1
+```
+
+**Option C — IAM role (recommended for CI/CD)**
+Attach an IAM role to your EC2 instance or use OIDC-based federation in GitHub Actions.
+
+**Minimum IAM permissions required:**
+`AmazonECS_FullAccess`, `AmazonVPCFullAccess`, `ElasticLoadBalancingFullAccess`,
+`IAMFullAccess`, `AmazonS3FullAccess`, `CloudWatchLogsFullAccess`
+
+---
+
+## 6. Terraform Backend Bootstrap
+
+The S3 backend must exist before running `terraform init`. Create it once with:
+
+```bash
+# 1. Create the bucket
+aws s3api create-bucket \
+  --bucket <your-bucket-name> \
+  --region us-east-1
+
+# 2. Enable versioning (allows state history and rollback)
+aws s3api put-bucket-versioning \
+  --bucket <your-bucket-name> \
+  --versioning-configuration Status=Enabled
+
+# 3. Enable server-side encryption
+aws s3api put-bucket-encryption \
+  --bucket <your-bucket-name> \
+  --server-side-encryption-configuration \
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+```
+
+Then update the `bucket` value in `terraform/backend.tf`:
+
+```hcl
+backend "s3" {
+  bucket = "<your-bucket-name>"   # ← change this
+  ...
+}
+```
+
+---
+
+## 7. Deployment Instructions
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/<your-username>/particle41-devops-challenge.git
+cd particle41-devops-challenge
+
+# 2. (Optional) Review and adjust variables
+#    Open terraform/terraform.tfvars to change region, image tag, scaling limits, etc.
+
+# 3. Initialise Terraform — downloads providers and the vpc registry module
+cd terraform
+terraform init
+
+# 4. Preview the changes
+terraform plan
+
+# 5. Deploy all infrastructure (~3–5 minutes)
+terraform apply
+
+# 6. Note the application URL from Terraform outputs
+#    app_url = "http://<alb-dns>.us-east-1.elb.amazonaws.com"
+```
+
+---
+
+## 8. Verify the Application
+
+After `terraform apply` completes, test the endpoints:
+
+```bash
+# Get the URL from Terraform output
+export APP_URL=$(terraform output -raw app_url)
+
+# Test the main endpoint
+curl $APP_URL/
+# Expected:
+# { "timestamp": "2026-04-08T14:32:10.123456+05:30", "ip": "203.0.113.45" }
+
+# Test the health endpoint
+curl $APP_URL/health
+# Expected:
+# { "status": "ok" }
+```
+
+> **Note:** ALB DNS propagation can take 1–2 minutes after `apply` completes.
+
+---
+
+## 9. Running the App Locally
 
 ```bash
 cd app
@@ -135,148 +238,64 @@ curl http://localhost:8080/health
 docker stop simpletimeservice && docker rm simpletimeservice
 ```
 
-### Public Image
-
-The image is published to DockerHub and runs as a non-root user (`nirdesh`, UID 1001):
-
+**Public image on DockerHub:**
 ```bash
 docker pull nirdeshkumar02/simpletimeservice:latest
-docker pull nirdeshkumar02/simpletimeservice:<version>    # e.g. 1.0.0
 ```
 
 ---
 
-## Part 2 — Deploying to AWS with Terraform
+## 10. GitHub Actions CI/CD Setup
 
-### Prerequisites
+1. Fork or clone this repository to your GitHub account
+2. Go to **Settings → Secrets and variables → Actions** and add:
 
-| Tool | Version | Install |
-|---|---|---|
-| [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) | >= 2.x | `brew install awscli` |
-| [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.6.0 | `brew install terraform` |
-
-### Step 1 — Configure AWS credentials
-
-```bash
-aws configure
-```
-
-The IAM principal needs permissions to create and manage: ECS, VPC, EC2, IAM, ALB, S3, and CloudWatch resources.
-
-### Step 2 — Create an S3 bucket for Terraform remote state
-
-This project uses an S3 backend for Terraform state and locking (extra credit). You must create your own bucket before running `terraform init`.
-
-```bash
-aws s3api create-bucket --bucket <your-bucket-name> --region us-east-1
-
-aws s3api put-bucket-versioning \
-  --bucket <your-bucket-name> \
-  --versioning-configuration Status=Enabled
-
-aws s3api put-bucket-encryption \
-  --bucket <your-bucket-name> \
-  --server-side-encryption-configuration \
-  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-```
-
-Then update **one line** in `terraform/versions.tf` — replace the bucket name with yours:
-
-```hcl
-# terraform/versions.tf
-backend "s3" {
-  bucket = "<your-bucket-name>"   # ← change this
-  ...
-}
-```
-
-### Step 3 — Review and adjust variables (optional)
-
-Open `terraform/terraform.tfvars` to review defaults. Key variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `aws_region` | `us-east-1` | AWS region |
-| `container_image` | `nirdeshkumar02/simpletimeservice:latest` | Image to deploy |
-| `task_cpu` | `256` | Fargate task CPU units (256 = 0.25 vCPU) |
-| `task_memory` | `512` | Fargate task memory (MiB) |
-| `desired_count` | `2` | Initial task replica count |
-| `min_capacity` | `2` | Autoscaling minimum |
-| `max_capacity` | `10` | Autoscaling maximum |
-| `cpu_scale_threshold` | `70` | Scale-out when avg CPU > this % |
-| `memory_scale_threshold` | `80` | Scale-out when avg memory > this % |
-
-### Step 4 — Deploy
-
-```bash
-cd terraform
-terraform init
-terraform plan
-terraform apply
-```
-
-Deployment takes approximately 3–5 minutes. At the end, Terraform prints the application URL:
-
-```
-Outputs:
-
-app_url = "http://<alb-dns>.us-east-1.elb.amazonaws.com"
-```
-
-### Step 5 — Verify
-
-```bash
-curl $(terraform output -raw app_url)
-curl $(terraform output -raw app_url)/health
-```
-
-### Teardown
-
-```bash
-terraform destroy
-```
-
----
-
-## CI/CD Pipeline
-
-A GitHub Actions workflow runs on pull requests and releases.
-
-| Event | What runs |
-|---|---|
-| Pull request to `main` | Build image → test `/` and `/health` endpoints → verify non-root user |
-| GitHub Release published | All of the above → push image to DockerHub as `:<version>` and `:latest` |
-
-Image tags follow the `nginx`-style convention — no `v` prefix (e.g. `1.0.0`, not `v1.0.0`).
-
-### GitHub Secrets
-
-Go to **Settings → Secrets and variables → Actions** and add:
-
-| Secret | Description |
+| Secret | Value |
 |---|---|
 | `DOCKERHUB_USERNAME` | Your DockerHub username |
-| `DOCKERHUB_TOKEN` | DockerHub Personal Access Token |
+| `DOCKERHUB_TOKEN` | DockerHub Personal Access Token (read/write) |
 
-### Triggering a Release
+**Pipeline behaviour:**
 
+| Event | Jobs that run |
+|---|---|
+| Pull request to `main` (app/ changes) | `build-and-test` — builds image, tests endpoints, verifies non-root user |
+| Push to `main` (app/ changes) | `build-and-test` → `push-main` — pushes `:<short-sha>` + `:latest` |
+| GitHub Release published | `build-and-test` → `push-release` — pushes `:<version>` + `:latest` |
+
+**Create a versioned release:**
 ```bash
 gh release create v1.0.0 --title "v1.0.0" --notes "Initial release"
-# Published to DockerHub as simpletimeservice:1.0.0 and simpletimeservice:latest
+# Publishes: nirdeshkumar02/simpletimeservice:1.0.0 and :latest
 ```
 
 ---
 
-## Extra Credit
+## 11. Extra Credit Features
 
 | Feature | Implementation |
 |---|---|
-| Non-root container | Runs as `nirdesh` (UID 1001) — enforced both in Dockerfile and ECS task definition |
-| Multi-arch image | Built for `linux/amd64` and `linux/arm64` |
-| Remote Terraform state | Optional S3 backend with encryption and native locking (see above) |
-| Fargate autoscaling | Scales tasks 2 → 10 based on configurable CPU and memory thresholds |
-| Health checks | Container-level health check on `/health`; ALB target group health check |
-| Fluent Bit sidecar | Structured log routing to CloudWatch Logs via FireLens |
-| Container Insights | ECS cluster-level CPU, memory, and network metrics in CloudWatch |
-| CI/CD pipeline | GitHub Actions — build, test, and push on release |
-| S3 VPC Gateway Endpoint | ECR image pulls bypass NAT Gateway (free path) |
+| **Remote S3 backend** | `terraform/backend.tf` — S3 with encryption and native locking (`use_lockfile = true`) |
+| **CPU + memory limits (hard & soft)** | App container: `cpu=192`, `memory=384` (hard), `memoryReservation=256` (soft). Fluent Bit: `cpu=64`, `memory=128` (hard), `memoryReservation=64` (soft) |
+| **ECS Auto Scaling** | Target tracking on CPU (default 60%) and memory (default 60%); scales 2 → 10 tasks |
+| **ALB health checks** | `GET /health`, 200 expected, interval 30s, threshold 2 healthy / 3 unhealthy, timeout 5s |
+| **Fluent Bit sidecar** | FireLens log router — routes app stdout/stderr to CloudWatch Logs at `/ecs/<name>` with `app/` stream prefix |
+| **GitHub Actions CI/CD** | Push to `main` → build + push `:<sha>` + `:latest`; Release → push `:<version>` + `:latest` |
+| **Deployment circuit breaker** | `deployment_circuit_breaker { enable = true, rollback = true }` — auto-rolls back on failed deployment |
+| **Container Insights** | ECS cluster-level CPU, memory, and network metrics in CloudWatch |
+| **S3 VPC Gateway Endpoint** | ECR image pulls bypass NAT Gateway — saves data transfer cost |
+| **Official VPC module** | Uses `terraform-aws-modules/vpc ~> 5.0` from the Terraform Registry |
+
+---
+
+## 12. Cleanup
+
+```bash
+cd terraform
+terraform destroy
+```
+
+> **Warning:** This permanently deletes all AWS resources created by this project, including the VPC,
+> ECS cluster, ALB, and all associated networking. The S3 backend bucket is **not** deleted
+> (it lives outside the Terraform state). Delete it manually if no longer needed:
+> `aws s3 rb s3://<your-bucket-name> --force`
