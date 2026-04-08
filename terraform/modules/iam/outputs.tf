@@ -1,14 +1,9 @@
-output "cluster_role_arn" {
-  description = "EKS cluster IAM role ARN"
-  value       = aws_iam_role.cluster.arn
+output "task_execution_role_arn" {
+  description = "ECS task execution role ARN — used by the ECS agent to pull images and write logs"
+  value       = aws_iam_role.task_execution.arn
 }
 
-output "node_role_arn" {
-  description = "Node group IAM role ARN"
-  value       = aws_iam_role.node_group.arn
-}
-
-output "node_role_name" {
-  description = "Node group IAM role name — used for policy attachments in other modules"
-  value       = aws_iam_role.node_group.name
+output "task_role_arn" {
+  description = "ECS task role ARN — assumed by the application container"
+  value       = aws_iam_role.task.arn
 }

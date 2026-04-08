@@ -3,11 +3,6 @@ variable "name" {
   type        = string
 }
 
-variable "cluster_name" {
-  description = "EKS cluster name — used for subnet discovery tags"
-  type        = string
-}
-
 variable "aws_region" {
   description = "AWS region — used for S3 VPC endpoint service name"
   type        = string
@@ -24,17 +19,17 @@ variable "availability_zone" {
 }
 
 variable "availability_zone_secondary" {
-  description = "Secondary AZ — EKS requires subnets in 2+ AZs"
+  description = "Secondary AZ — ALB and ECS tasks span both AZs for high availability"
   type        = string
 }
 
 variable "public_subnet_cidr" {
-  description = "CIDR for primary public subnet (NAT Gateway + ALB)"
+  description = "CIDR for primary public subnet (ALB + NAT Gateway)"
   type        = string
 }
 
 variable "private_subnet_cidr" {
-  description = "CIDR for primary private subnet (EKS nodes)"
+  description = "CIDR for primary private subnet (ECS Fargate tasks)"
   type        = string
 }
 
@@ -44,6 +39,6 @@ variable "public_subnet_secondary_cidr" {
 }
 
 variable "private_subnet_secondary_cidr" {
-  description = "CIDR for secondary private subnet (EKS nodes)"
+  description = "CIDR for secondary private subnet (ECS Fargate tasks)"
   type        = string
 }

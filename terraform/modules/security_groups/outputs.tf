@@ -1,9 +1,9 @@
-output "cluster_security_group_id" {
-  description = "Cluster SG ID — attached to the EKS control plane"
-  value       = aws_security_group.cluster.id
+output "alb_security_group_id" {
+  description = "ALB security group ID — attached to the Application Load Balancer"
+  value       = aws_security_group.alb.id
 }
 
-output "node_security_group_id" {
-  description = "Node SG ID — needed for Karpenter EC2NodeClass and node group"
-  value       = aws_security_group.nodes.id
+output "ecs_security_group_id" {
+  description = "ECS security group ID — attached to Fargate tasks"
+  value       = aws_security_group.ecs.id
 }
