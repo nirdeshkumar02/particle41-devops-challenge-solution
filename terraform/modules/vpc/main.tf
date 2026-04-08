@@ -1,7 +1,5 @@
 resource "aws_vpc" "this" {
-  cidr_block = var.vpc_cidr
-
-  # Both required by EKS — nodes need DNS resolution to register with the cluster
+  cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
 
@@ -25,9 +23,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                        = "${var.name}-public-${var.availability_zone}"
-    "kubernetes.io/role/elb"                    = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    Name = "${var.name}-public-${var.availability_zone}"
   }
 }
 
@@ -38,9 +34,7 @@ resource "aws_subnet" "public_secondary" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                        = "${var.name}-public-${var.availability_zone_secondary}"
-    "kubernetes.io/role/elb"                    = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    Name = "${var.name}-public-${var.availability_zone_secondary}"
   }
 }
 
@@ -50,10 +44,7 @@ resource "aws_subnet" "private" {
   availability_zone = var.availability_zone
 
   tags = {
-    Name                                        = "${var.name}-private-${var.availability_zone}"
-    "kubernetes.io/role/internal-elb"           = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-    "karpenter.sh/discovery"                    = var.cluster_name
+    Name = "${var.name}-private-${var.availability_zone}"
   }
 }
 
@@ -63,10 +54,7 @@ resource "aws_subnet" "private_secondary" {
   availability_zone = var.availability_zone_secondary
 
   tags = {
-    Name                                        = "${var.name}-private-${var.availability_zone_secondary}"
-    "kubernetes.io/role/internal-elb"           = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-    "karpenter.sh/discovery"                    = var.cluster_name
+    Name = "${var.name}-private-${var.availability_zone_secondary}"
   }
 }
 
@@ -135,7 +123,7 @@ resource "aws_route_table_association" "private_secondary" {
   route_table_id = aws_route_table.private.id
 }
 
-# Routes ECR image pulls over the AWS backbone — bypasses NAT Gateway charges
+# Routes ECR/S3 image pulls over the AWS backbone — avoids NAT Gateway data charges
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"

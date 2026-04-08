@@ -1,71 +1,53 @@
-resource "aws_security_group" "cluster" {
-  name        = "${var.name}-cluster-sg"
-  description = "${var.name}-cluster-sg"
+# ALB Security Group — accepts inbound HTTP from the internet
+resource "aws_security_group" "alb" {
+  name        = "${var.name}-alb-sg"
+  description = "Allow inbound HTTP from internet to ALB"
   vpc_id      = var.vpc_id
 
+  ingress {
+    description = "HTTP from internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags = {
-    Name = "${var.name}-cluster-sg"
+    Name = "${var.name}-alb-sg"
   }
 }
 
-resource "aws_security_group_rule" "cluster_ingress_from_nodes" {
-  security_group_id        = aws_security_group.cluster.id
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.nodes.id
-  description              = "Allow nodes to reach API server"
-}
-
-resource "aws_security_group_rule" "cluster_egress_all" {
-  security_group_id = aws_security_group.cluster.id
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "Allow all outbound from control plane"
-}
-
-resource "aws_security_group" "nodes" {
-  name        = "${var.name}-nodes-sg"
-  description = "${var.name}-nodes-sg"
+# ECS Security Group — accepts inbound only from the ALB on the app port
+resource "aws_security_group" "ecs" {
+  name        = "${var.name}-ecs-sg"
+  description = "Allow inbound from ALB to ECS tasks on port 8080"
   vpc_id      = var.vpc_id
 
-  tags = {
-    Name                                          = "${var.name}-nodes-sg"
-    "karpenter.sh/discovery"                      = var.cluster_name
-    "kubernetes.io/cluster/${var.cluster_name}"   = "owned"
+  ingress {
+    description     = "App port from ALB"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
-}
 
-resource "aws_security_group_rule" "nodes_ingress_self" {
-  security_group_id        = aws_security_group.nodes.id
-  type                     = "ingress"
-  from_port                = 0
-  to_port                  = 65535
-  protocol                 = "-1"
-  source_security_group_id = aws_security_group.nodes.id
-  description              = "Allow all node-to-node traffic"
-}
+  egress {
+    description = "Allow all outbound (NAT GW for image pulls, CloudWatch logs)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-resource "aws_security_group_rule" "nodes_ingress_from_cluster" {
-  security_group_id        = aws_security_group.nodes.id
-  type                     = "ingress"
-  from_port                = 0
-  to_port                  = 65535
-  protocol                 = "-1"
-  source_security_group_id = aws_security_group.cluster.id
-  description              = "Allow all traffic from control plane"
-}
-
-resource "aws_security_group_rule" "nodes_egress_all" {
-  security_group_id = aws_security_group.nodes.id
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "Allow all outbound from nodes"
+  tags = {
+    Name = "${var.name}-ecs-sg"
+  }
 }

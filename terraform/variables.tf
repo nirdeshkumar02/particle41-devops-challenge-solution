@@ -25,6 +25,8 @@ variable "cost_center" {
   default     = "engineering"
 }
 
+# ── Networking ─────────────────────────────────────────────────────────────────
+
 variable "vpc_cidr" {
   description = "CIDR block for the VPC"
   type        = string
@@ -32,25 +34,25 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zone" {
-  description = "Primary AZ"
+  description = "Primary AZ — NAT Gateway and first set of subnets live here"
   type        = string
   default     = "us-east-1a"
 }
 
 variable "availability_zone_secondary" {
-  description = "Secondary AZ — EKS requires subnets in 2+ AZs"
+  description = "Secondary AZ — ALB and ECS tasks span both AZs for high availability"
   type        = string
   default     = "us-east-1b"
 }
 
 variable "public_subnet_cidr" {
-  description = "CIDR for primary public subnet"
+  description = "CIDR for primary public subnet (ALB + NAT Gateway)"
   type        = string
   default     = "10.0.0.0/20"
 }
 
 variable "private_subnet_cidr" {
-  description = "CIDR for primary private subnet"
+  description = "CIDR for primary private subnet (ECS Fargate tasks)"
   type        = string
   default     = "10.0.128.0/20"
 }
@@ -62,91 +64,58 @@ variable "public_subnet_secondary_cidr" {
 }
 
 variable "private_subnet_secondary_cidr" {
-  description = "CIDR for secondary private subnet"
+  description = "CIDR for secondary private subnet (ECS Fargate tasks)"
   type        = string
   default     = "10.0.144.0/20"
 }
 
-variable "cluster_version" {
-  description = "Kubernetes version"
+# ── Application ────────────────────────────────────────────────────────────────
+
+variable "container_image" {
+  description = "Full container image reference including tag (e.g. nirdeshkumar02/simpletimeservice:0.0.1)"
   type        = string
-  default     = "1.34"
 }
 
-variable "cluster_endpoint_public_access" {
-  description = "Enable public access to the EKS API endpoint"
-  type        = bool
-  default     = true
+variable "health_check_path" {
+  description = "HTTP path used by the ALB target group health check"
+  type        = string
+  default     = "/health"
 }
 
-variable "cluster_endpoint_public_access_cidrs" {
-  description = "CIDRs allowed to reach the public EKS endpoint"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
+# ── ECS Fargate ────────────────────────────────────────────────────────────────
+
+variable "task_cpu" {
+  description = "CPU units for the Fargate task (256 = 0.25 vCPU)"
+  type        = number
+  default     = 256
 }
 
-variable "cluster_log_retention_days" {
-  description = "CloudWatch log retention in days for EKS control plane logs"
+variable "task_memory" {
+  description = "Memory in MiB for the Fargate task"
+  type        = number
+  default     = 512
+}
+
+variable "desired_count" {
+  description = "Initial number of ECS task replicas"
+  type        = number
+  default     = 2
+}
+
+variable "min_capacity" {
+  description = "Minimum number of tasks for autoscaling"
+  type        = number
+  default     = 2
+}
+
+variable "max_capacity" {
+  description = "Maximum number of tasks for autoscaling"
+  type        = number
+  default     = 10
+}
+
+variable "log_retention_days" {
+  description = "CloudWatch log retention period in days"
   type        = number
   default     = 7
-}
-
-variable "node_instance_type" {
-  description = "EC2 instance type for worker nodes"
-  type        = string
-  default     = "m7i-flex.large"
-}
-
-variable "node_ami_type" {
-  description = "AMI type for worker nodes"
-  type        = string
-  default     = "AL2023_x86_64_STANDARD"
-}
-
-variable "node_disk_size_gb" {
-  description = "Root EBS volume size in GiB per node"
-  type        = number
-  default     = 50
-}
-
-variable "node_min_size" {
-  description = "Minimum number of nodes in the node group"
-  type        = number
-  default     = 2
-}
-
-variable "node_desired_size" {
-  description = "Desired number of nodes at launch"
-  type        = number
-  default     = 2
-}
-
-variable "node_max_size" {
-  description = "Maximum number of nodes"
-  type        = number
-  default     = 5
-}
-
-variable "addon_vpc_cni_version" {
-  description = "VPC CNI add-on version. Leave empty for latest compatible."
-  type        = string
-  default     = ""
-}
-
-variable "addon_coredns_version" {
-  description = "CoreDNS add-on version. Leave empty for latest compatible."
-  type        = string
-  default     = ""
-}
-
-variable "addon_kube_proxy_version" {
-  description = "kube-proxy add-on version. Leave empty for latest compatible."
-  type        = string
-  default     = ""
-}
-
-variable "addon_metrics_server_version" {
-  description = "Metrics Server add-on version. Leave empty for latest compatible."
-  type        = string
-  default     = ""
 }

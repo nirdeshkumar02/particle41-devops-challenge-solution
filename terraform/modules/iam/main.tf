@@ -1,65 +1,48 @@
-resource "aws_iam_role" "cluster" {
-  name = "${var.name}-cluster-role"
+# Task Execution Role — used by the ECS agent to pull images and write logs
+resource "aws_iam_role" "task_execution" {
+  name = "${var.name}-task-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid    = "EKSClusterAssumeRole"
+      Sid    = "ECSTasksAssumeRole"
       Effect = "Allow"
       Principal = {
-        Service = "eks.amazonaws.com"
+        Service = "ecs-tasks.amazonaws.com"
       }
       Action = "sts:AssumeRole"
     }]
   })
 
   tags = {
-    Name = "${var.name}-cluster-role"
+    Name = "${var.name}-task-execution-role"
   }
 }
 
-resource "aws_iam_role_policy_attachment" "cluster_eks_policy" {
-  role       = aws_iam_role.cluster.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+# Grants ECS agent permissions to pull images from ECR and write to CloudWatch Logs
+resource "aws_iam_role_policy_attachment" "task_execution_policy" {
+  role       = aws_iam_role.task_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_iam_role" "node_group" {
-  name = "${var.name}-nodegroup-role"
+# Task Role — assumed by the application container itself (app-level AWS calls)
+# Kept minimal — SimpleTimeService makes no AWS API calls
+resource "aws_iam_role" "task" {
+  name = "${var.name}-task-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid    = "EC2AssumeRole"
+      Sid    = "ECSTasksAssumeRole"
       Effect = "Allow"
       Principal = {
-        Service = "ec2.amazonaws.com"
+        Service = "ecs-tasks.amazonaws.com"
       }
       Action = "sts:AssumeRole"
     }]
   })
 
   tags = {
-    Name = "${var.name}-nodegroup-role"
+    Name = "${var.name}-task-role"
   }
-}
-
-resource "aws_iam_role_policy_attachment" "node_worker_policy" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-}
-
-resource "aws_iam_role_policy_attachment" "node_ecr_policy" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-}
-
-# SSM — shell access via Session Manager without needing SSH or a bastion
-resource "aws_iam_role_policy_attachment" "node_ssm_policy" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy_attachment" "node_cni_policy" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
