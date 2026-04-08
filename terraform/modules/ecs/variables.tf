@@ -18,6 +18,12 @@ variable "container_image" {
   type        = string
 }
 
+variable "container_port" {
+  description = "Port the application container listens on"
+  type        = number
+  default     = 8080
+}
+
 variable "task_cpu" {
   description = "CPU units for the Fargate task (256 = 0.25 vCPU)"
   type        = number

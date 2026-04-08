@@ -1,6 +1,6 @@
 output "app_url" {
   description = "Application URL — access the running service at this address"
-  value       = "http://${module.alb.alb_dns_name}"
+  value       = "http://${module.alb.dns_name}"
 }
 
 output "vpc_id" {
@@ -10,7 +10,7 @@ output "vpc_id" {
 
 output "nat_gateway_public_ip" {
   description = "NAT Gateway EIP — outbound IP for ECS tasks"
-  value       = module.vpc.nat_gateway_public_ip
+  value       = module.vpc.nat_public_ips[0]
 }
 
 output "ecs_cluster_name" {

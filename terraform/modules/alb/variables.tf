@@ -18,6 +18,12 @@ variable "alb_security_group_id" {
   type        = string
 }
 
+variable "container_port" {
+  description = "Port the application container listens on — used for target group port and health check"
+  type        = number
+  default     = 8080
+}
+
 variable "health_check_path" {
   description = "HTTP path for ALB target group health checks"
   type        = string
