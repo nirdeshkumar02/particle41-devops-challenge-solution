@@ -27,7 +27,7 @@ containerised with Docker and deployed to AWS ECS Fargate via Terraform.
 ## 1. Project Overview
 
 SimpleTimeService is a minimal HTTP microservice built with **FastAPI** and **uvicorn**
-on **Python 3.12-alpine**. It exposes two endpoints: `GET /` returns a
+on **Python 3.12**. It exposes two endpoints: `GET /` returns a
 JSON object with the current timestamp (ISO 8601, server local time) and the caller's IP
 address — extracted from the `X-Forwarded-For` header set by the ALB, falling back to the
 direct connection address when the header is absent. `GET /health` returns a fixed `{"status":"ok"}`
@@ -58,8 +58,7 @@ The container runs as a non-root user (`nirdesh`, UID 1000) and is published to 
 │   │   └── docker-setup/      # Composite: Buildx + optional DockerHub login
 │   └── workflows/
 │       └── docker-publish.yml # CI/CD pipeline
-└── docs/
-    └── architecture.svg   # Architecture diagram (this file)
+└── architecture.png   # Architecture diagram (this file)
 ```
 
 ### API Response
@@ -85,7 +84,7 @@ GET /health
 
 ## 2. Architecture Diagram
 
-![Architecture Diagram](docs/architecture.png)
+![Architecture Diagram](architecture.png)
 
 **Traffic flow in plain English:**
 A browser or curl request hits the internet-facing ALB (`particle41-production-alb`) on port 80.
@@ -300,7 +299,7 @@ This is a **one-time setup** performed before the first `terraform init`. The Te
 is stored remotely in S3 with native locking (`use_lockfile = true`) — no DynamoDB table is
 needed. The bucket must exist before Terraform can initialise.
 
-S3 bucket names are globally unique across all AWS accounts, so you must choose your own name.
+S3 bucket names should be to the AWS account, so you must choose your own name.
 Once chosen, replace every occurrence of `<your-unique-bucket-name>` below with your chosen name,
 and update the `bucket` value in `terraform/backend.tf` to match.
 
@@ -323,7 +322,7 @@ aws s3api put-bucket-encryption --bucket <your-unique-bucket-name> --server-side
 # 4. Block all public access — state files must never be publicly readable
 aws s3api put-public-access-block --bucket <your-unique-bucket-name> --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
-# 5. Update terraform/backend.tf with your bucket name, then verify the change
+# 5. Update `terraform/backend.tf` with your bucket name, then verify the change
 terraform {
   backend "s3" {
     bucket       = <your-unique-bucket-name>
@@ -345,8 +344,8 @@ Once the bucket exists, proceed to the Deployment Instructions below.
 ### Step 1 — Clone the repository
 
 ```bash
-git clone https://github.com/nirdeshkumar02/particle41-devops-challenge.git
-cd particle41-devops-challenge
+git clone https://github.com/nirdeshkumar02/particle41-devops-challenge-solution.git
+cd particle41-devops-challenge-solution
 ```
 
 ### Step 2 — Review and update `terraform/backend.tf`
@@ -459,15 +458,12 @@ Do you want to perform these actions?
 Type `yes` and press Enter. Deployment takes approximately **5–8 minutes** — most of the
 time is spent waiting for the ALB and NAT Gateway to become active.
 
-> **Automation tip:** In a CI/CD pipeline where you have already reviewed `terraform plan`,
-> you can skip the confirmation prompt with `terraform apply -auto-approve`. Do **not** use
-> this flag interactively — you will not get a chance to review what will be destroyed or
-> changed before it happens.
+> **Automation tip:** If you had reviewed the plan earlier;you can skip the confirmation prompt
+> with `terraform apply -auto-approve`. Do **not** use this flag interactively — you will not get a > chance to review what will be destroyed or changed before it happens.
 
 ### Step 7 — Retrieve the application URL
 
-After `apply` completes, Terraform prints all outputs automatically. To retrieve the URL
-at any time afterwards:
+After `apply` completes, Check for `app_url` in Terraform Outputs. Terraform prints all outputs automatically. To retrieve the URL at any time afterwards:
 
 ```bash
 terraform output app_url
@@ -992,7 +988,7 @@ terraform destroy
 > Costs scale with the `desired_count` variable. With `desired_count = 1` and autoscaling
 > holding at minimum, the Fargate line drops to ~$10/month.
 
-The **S3 backend bucket** (`dev-nird-tf-bucket`) is **not** part of this Terraform state and
+The **S3 backend bucket** is **not** part of this Terraform state and
 will **not** be deleted by `terraform destroy` — this is intentional, to protect state history
 from accidental deletion. Delete it manually only when you are certain it is no longer needed:
 
