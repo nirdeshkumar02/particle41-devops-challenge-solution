@@ -213,9 +213,6 @@ aws sts get-caller-identity
 
 **Option B — Environment variables**
 
-Use this when you cannot persist credentials to disk (e.g. a CI runner without a secrets manager).
-The variables are read by the AWS provider automatically.
-
 ```bash
 export AWS_ACCESS_KEY_ID="<your-access-key-id>"
 export AWS_SECRET_ACCESS_KEY="<your-secret-access-key>"
@@ -238,44 +235,6 @@ or stored. Sessions expire automatically (typically 8–12 hours) and must be re
 browser login.
 
 > **If you are an individual developer without an SSO portal, use Option A or B instead.**
-
-**Step 1 — Add an SSO profile to `~/.aws/config`** (your admin will provide the values
-for `sso_start_url`, `sso_account_id`, and `sso_role_name`):
-
-```ini
-[profile particle41-dev]
-sso_session      = particle41-session
-sso_account_id   = 123456789012
-sso_role_name    = DeployerRole
-region           = us-east-1
-output           = json
-
-[sso-session particle41-session]
-sso_start_url    = https://particle41.awsapps.com/start
-sso_region       = us-east-1
-sso_registration_scopes = sso:account:access
-```
-
-**Step 2 — Log in via the SSO portal** (opens a browser tab to approve the session):
-
-```bash
-aws sso login --profile particle41-dev
-```
-
-**Step 3 — Export the profile so Terraform picks it up automatically:**
-
-```bash
-export AWS_PROFILE=particle41-dev
-```
-
-Verify the active identity:
-
-```bash
-aws sts get-caller-identity --profile particle41-dev
-```
-
-> **Session expiry:** SSO tokens expire. If Terraform returns an authentication error hours
-> later, re-run `aws sso login --profile particle41-dev` and re-export `AWS_PROFILE`.
 
 ---
 
@@ -320,7 +279,7 @@ aws s3api put-bucket-encryption --bucket <your-unique-bucket-name> --server-side
   }'
 
 # 4. Block all public access — state files must never be publicly readable
-aws s3api put-public-access-block --bucket <your-unique-bucket-name> --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+aws s3api put-public-access-block --bucket <your-unique-bucket-name> / --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
 # 5. Update `terraform/backend.tf` with your bucket name, then verify the change
 terraform {
@@ -458,7 +417,7 @@ Do you want to perform these actions?
 Type `yes` and press Enter. Deployment takes approximately **5–8 minutes** — most of the
 time is spent waiting for the ALB and NAT Gateway to become active.
 
-> **Automation tip:** If you had reviewed the plan earlier;you can skip the confirmation prompt
+> **Automation tip:** If you had reviewed the plan earlier; you can skip the confirmation prompt
 > with `terraform apply -auto-approve`. Do **not** use this flag interactively — you will not get a > chance to review what will be destroyed or changed before it happens.
 
 ### Step 7 — Retrieve the application URL
