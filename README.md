@@ -26,8 +26,8 @@ containerised with Docker and deployed to AWS ECS Fargate via Terraform.
 
 ## 1. Project Overview
 
-SimpleTimeService is a minimal HTTP microservice built with **FastAPI 0.115.12** and
-**uvicorn 0.34.2** on **Python 3.12-alpine**. It exposes two endpoints: `GET /` returns a
+SimpleTimeService is a minimal HTTP microservice built with **FastAPI** and **uvicorn**
+on **Python 3.12-alpine**. It exposes two endpoints: `GET /` returns a
 JSON object with the current timestamp (ISO 8601, server local time) and the caller's IP
 address — extracted from the `X-Forwarded-For` header set by the ALB, falling back to the
 direct connection address when the header is absent. `GET /health` returns a fixed `{"status":"ok"}`
@@ -52,7 +52,7 @@ The container runs as a non-root user (`nirdesh`, UID 1000) and is published to 
 │   ├── terraform.tfvars   # Concrete values used for this deployment
 │   ├── outputs.tf         # app_url, vpc_id, ecs_cluster_name, log_group_name…
 │   └── modules/
-│       └── ecs/           # ECS cluster, task definition, service, autoscaling
+│       └── ecs/           # Local module: ECS cluster, task definition, service, autoscaling
 ├── .github/
 │   ├── actions/
 │   │   ├── docker-setup/      # Composite: Buildx + optional DockerHub login
