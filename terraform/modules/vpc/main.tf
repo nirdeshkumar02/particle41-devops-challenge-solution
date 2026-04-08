@@ -122,19 +122,3 @@ resource "aws_route_table_association" "private_secondary" {
   subnet_id      = aws_subnet.private_secondary.id
   route_table_id = aws_route_table.private.id
 }
-
-# Routes ECR/S3 image pulls over the AWS backbone — avoids NAT Gateway data charges
-resource "aws_vpc_endpoint" "s3" {
-  vpc_id            = aws_vpc.this.id
-  service_name      = "com.amazonaws.${var.aws_region}.s3"
-  vpc_endpoint_type = "Gateway"
-
-  route_table_ids = [
-    aws_route_table.public.id,
-    aws_route_table.private.id,
-  ]
-
-  tags = {
-    Name = "${var.name}-s3-endpoint"
-  }
-}
