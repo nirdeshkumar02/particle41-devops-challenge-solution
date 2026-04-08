@@ -1,5 +1,5 @@
 # Remote S3 backend — stores Terraform state with native locking (no DynamoDB needed).
-# See README § "Terraform Backend Bootstrap" for one-time bucket creation steps.
+# See README "Terraform Backend Bootstrap" for one-time bucket creation steps.
 
 terraform {
   backend "s3" {

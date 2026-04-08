@@ -307,19 +307,13 @@ and update the `bucket` value in `terraform/backend.tf` to match.
 ```bash
 # 1. Create the S3 bucket for Terraform state
 #    The region must match the region in terraform/backend.tf (us-east-1)
-aws s3api create-bucket \
-  --bucket <your-unique-bucket-name> \
-  --region us-east-1
+aws s3api create-bucket --bucket <your-unique-bucket-name> --region us-east-1
 
 # 2. Enable versioning — lets you roll back to a previous state if apply goes wrong
-aws s3api put-bucket-versioning \
-  --bucket <your-unique-bucket-name> \
-  --versioning-configuration Status=Enabled
+aws s3api put-bucket-versioning --bucket <your-unique-bucket-name> --versioning-configuration Status=Enabled
 
 # 3. Enable server-side encryption — state files can contain sensitive resource IDs
-aws s3api put-bucket-encryption \
-  --bucket <your-unique-bucket-name> \
-  --server-side-encryption-configuration '{
+aws s3api put-bucket-encryption --bucket <your-unique-bucket-name> --server-side-encryption-configuration '{
     "Rules": [{
       "ApplyServerSideEncryptionByDefault": {
         "SSEAlgorithm": "AES256"
@@ -328,23 +322,18 @@ aws s3api put-bucket-encryption \
   }'
 
 # 4. Block all public access — state files must never be publicly readable
-aws s3api put-public-access-block \
-  --bucket <your-unique-bucket-name> \
-  --public-access-block-configuration \
-    "BlockPublicAcls=true,IgnorePublicAcls=true,\
-     BlockPublicPolicy=true,RestrictPublicBuckets=true"
+aws s3api put-public-access-block --bucket <your-unique-bucket-name> --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
 # 5. Update terraform/backend.tf with your bucket name, then verify the change
-sed -i '' 's/bucket = ".*"/bucket = "<your-unique-bucket-name>"/' terraform/backend.tf
-grep 'bucket' terraform/backend.tf
+terraform {
+  backend "s3" {
+    bucket       = <your-unique-bucket-name>
+    ...
+  }
+}
 ```
 
 Once the bucket exists, proceed to the Deployment Instructions below.
-
-> **Skip S3 altogether:** If you want a quick local deployment without the bootstrap,
-> remove the `backend "s3" { ... }` block from `terraform/backend.tf` entirely.
-> Terraform will write state to a local `terraform.tfstate` file instead.
-
 ---
 
 ## 7. Deployment Instructions
@@ -377,45 +366,39 @@ All variables have sensible defaults. The file is fully annotated below — chan
 before deploying if needed. The most common change is `container_image` if you want to deploy
 your own image instead of the pre-built one.
 
-```hcl
-# AWS region where all resources will be created
-aws_region  = "us-east-1"
+All variables are declared in [terraform/variables.tf](terraform/variables.tf).
+The values below are from [terraform/terraform.tfvars](terraform/terraform.tfvars) —
+edit that file to customise your deployment.
 
-# These three values are combined to name every resource: particle41-production-<resource>
-project     = "particle41"
-environment = "production"
-owner       = "nirdesh"
+| Variable | Value in tfvars | Description |
+|---|---|---|
+| `aws_region` | `"us-east-1"` | AWS region for all resources |
+| `project` | `"particle41"` | Project name — prefixed to every resource name |
+| `environment` | `"production"` | Deployment environment — appended after project |
+| `owner` | `"nirdesh"` | Owner tag applied to all resources |
+| `cost_center` | `"engineering"` | Cost center tag for billing |
+| `vpc_cidr` | `"10.0.0.0/16"` | CIDR block for the VPC |
+| `availability_zones` | `["us-east-1a", "us-east-1b"]` | Exactly 2 AZs required |
+| `public_subnet_cidrs` | `["10.0.0.0/20", "10.0.16.0/20"]` | Public subnets — ALB and NAT Gateway |
+| `private_subnet_cidrs` | `["10.0.128.0/20", "10.0.144.0/20"]` | Private subnets — ECS tasks |
+| `container_image` | `"nirdeshkumar02/simpletimeservice:0.0.4"` | Full image reference including tag |
+| `container_port` | `8080` | Port the container listens on |
+| `health_check_path` | `"/health"` | HTTP path for ALB and container health checks |
+| `task_cpu` | `256` | Total task CPU (256 units = 0.25 vCPU) |
+| `task_memory` | `512` | Total task memory in MiB |
+| `desired_count` | `2` | Initial ECS task replica count |
+| `min_capacity` | `1` | Autoscaling floor |
+| `max_capacity` | `5` | Autoscaling ceiling |
+| `cpu_scale_threshold` | `60` | CPU % that triggers scale-out |
+| `memory_scale_threshold` | `60` | Memory % that triggers scale-out |
+| `log_retention_days` | `7` | CloudWatch log retention in days |
 
-# Billing tag applied to all resources — useful for cost allocation reports
-cost_center = "engineering"
+To override any value without editing the file:
 
-# VPC and subnet layout — /16 VPC split into /20 slices per AZ
-vpc_cidr             = "10.0.0.0/16"
-availability_zones   = ["us-east-1a", "us-east-1b"]
-public_subnet_cidrs  = ["10.0.0.0/20", "10.0.16.0/20"]   # ALB + NAT Gateway
-private_subnet_cidrs = ["10.0.128.0/20", "10.0.144.0/20"] # ECS tasks (no public IPs)
-
-# Container image to deploy — update this tag when you push a new version
-container_image   = "nirdeshkumar02/simpletimeservice:0.0.4"
-container_port    = 8080          # uvicorn listens on this port
-health_check_path = "/health"     # ALB and container HEALTHCHECK both hit this path
-
-# Fargate task sizing: 256 CPU units = 0.25 vCPU; 512 MiB total memory
-task_cpu      = 256
-task_memory   = 512
-
-# Start with 2 replicas (one per AZ); autoscaling adjusts between min and max
-desired_count = 2
-min_capacity  = 1
-max_capacity  = 5
-
-# Scale out when either metric exceeds 60% utilisation; scale in when it drops below
-cpu_scale_threshold    = 60
-memory_scale_threshold = 60
-
-# CloudWatch log retention — increase for longer audit trails, reduce for cost savings
-log_retention_days = 7
+```bash
+terraform apply -var="desired_count=3" -var="max_capacity=10"
 ```
+
 
 ### Step 4 — Initialise Terraform
 
@@ -648,7 +631,7 @@ before the pipeline can push images.
 
 | Secret name (exact, case-sensitive) | Value |
 |---|---|
-| `DOCKERHUB_USERNAME` | Your DockerHub username — e.g. `nirdeshkumar02` |
+| `DOCKERHUB_USERNAME` | Your DockerHub username |
 | `DOCKERHUB_TOKEN` | The Personal Access Token you copied in Step 1 |
 
 ### When the Pipeline Triggers
@@ -717,43 +700,6 @@ nirdeshkumar02/simpletimeservice:latest  ← floating latest pointer
 
 > Every image pushed by the pipeline is built for both `linux/amd64` and `linux/arm64`,
 > so it runs natively on Intel/AMD servers and Apple Silicon (M1/M2/M3) without emulation.
-
----
-
-## 11. Terraform Variables Reference
-
-All variables are declared in [terraform/variables.tf](terraform/variables.tf).
-The values below are from [terraform/terraform.tfvars](terraform/terraform.tfvars) —
-edit that file to customise your deployment.
-
-| Variable | Value in tfvars | Description |
-|---|---|---|
-| `aws_region` | `"us-east-1"` | AWS region for all resources |
-| `project` | `"particle41"` | Project name — prefixed to every resource name |
-| `environment` | `"production"` | Deployment environment — appended after project |
-| `owner` | `"nirdesh"` | Owner tag applied to all resources |
-| `cost_center` | `"engineering"` | Cost center tag for billing |
-| `vpc_cidr` | `"10.0.0.0/16"` | CIDR block for the VPC |
-| `availability_zones` | `["us-east-1a", "us-east-1b"]` | Exactly 2 AZs required |
-| `public_subnet_cidrs` | `["10.0.0.0/20", "10.0.16.0/20"]` | Public subnets — ALB and NAT Gateway |
-| `private_subnet_cidrs` | `["10.0.128.0/20", "10.0.144.0/20"]` | Private subnets — ECS tasks |
-| `container_image` | `"nirdeshkumar02/simpletimeservice:0.0.4"` | Full image reference including tag |
-| `container_port` | `8080` | Port the container listens on |
-| `health_check_path` | `"/health"` | HTTP path for ALB and container health checks |
-| `task_cpu` | `256` | Total task CPU (256 units = 0.25 vCPU) |
-| `task_memory` | `512` | Total task memory in MiB |
-| `desired_count` | `2` | Initial ECS task replica count |
-| `min_capacity` | `1` | Autoscaling floor |
-| `max_capacity` | `5` | Autoscaling ceiling |
-| `cpu_scale_threshold` | `60` | CPU % that triggers scale-out |
-| `memory_scale_threshold` | `60` | Memory % that triggers scale-out |
-| `log_retention_days` | `7` | CloudWatch log retention in days |
-
-To override any value without editing the file:
-
-```bash
-terraform apply -var="desired_count=3" -var="max_capacity=10"
-```
 
 ---
 
