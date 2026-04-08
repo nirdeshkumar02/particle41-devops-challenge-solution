@@ -2,7 +2,7 @@ terraform {
   required_version = ">= 1.6.0"
 
   backend "s3" {
-    bucket       = "dev-nird-tf-bucket"
+    bucket       = "dev-nird-tf-bucket"   # update to your own bucket name — see README
     key          = "ecs/particle41/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true

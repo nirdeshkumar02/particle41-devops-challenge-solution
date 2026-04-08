@@ -114,6 +114,18 @@ variable "max_capacity" {
   default     = 10
 }
 
+variable "cpu_scale_threshold" {
+  description = "Target CPU utilisation percentage that triggers ECS scale-out"
+  type        = number
+  default     = 70
+}
+
+variable "memory_scale_threshold" {
+  description = "Target memory utilisation percentage that triggers ECS scale-out"
+  type        = number
+  default     = 80
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention period in days"
   type        = number

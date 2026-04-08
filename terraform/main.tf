@@ -52,6 +52,9 @@ module "ecs" {
   min_capacity    = var.min_capacity
   max_capacity    = var.max_capacity
 
+  cpu_scale_threshold    = var.cpu_scale_threshold
+  memory_scale_threshold = var.memory_scale_threshold
+
   log_retention_days = var.log_retention_days
 
   private_subnet_ids    = module.vpc.private_subnet_ids

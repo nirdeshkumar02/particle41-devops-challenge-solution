@@ -26,7 +26,6 @@ resource "aws_iam_role_policy_attachment" "task_execution_policy" {
 }
 
 # Task Role — assumed by the application container itself (app-level AWS calls)
-# Kept minimal — SimpleTimeService makes no AWS API calls
 resource "aws_iam_role" "task" {
   name = "${var.name}-task-role"
 
@@ -45,4 +44,26 @@ resource "aws_iam_role" "task" {
   tags = {
     Name = "${var.name}-task-role"
   }
+}
+
+# Fluent Bit runs inside the task and uses the task role to ship logs to CloudWatch.
+# The execution role covers the ECS agent; the task role covers in-container AWS calls.
+resource "aws_iam_role_policy" "task_cloudwatch_logs" {
+  name = "${var.name}-task-cloudwatch-logs"
+  role = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "FluentBitCloudWatchLogs"
+      Effect = "Allow"
+      Action = [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+      ]
+      Resource = "arn:aws:logs:*:*:*"
+    }]
+  })
 }

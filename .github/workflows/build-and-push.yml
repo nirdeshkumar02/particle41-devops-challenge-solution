@@ -69,6 +69,11 @@ jobs:
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Resolve version tag
+        id: version
+        # Strip leading 'v' so releases tagged v1.2.3 publish as 1.2.3 (nginx-style)
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -76,7 +81,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/simpletimeservice:${{ github.event.release.tag_name }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/simpletimeservice:${{ steps.version.outputs.tag }}
             ${{ secrets.DOCKERHUB_USERNAME }}/simpletimeservice:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

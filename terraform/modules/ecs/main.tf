@@ -57,7 +57,8 @@ resource "aws_ecs_task_definition" "app" {
       # (adjust if adding more sidecars)
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+        # wget (busybox) is always present in Alpine; curl is not
+        command     = ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/health || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
@@ -92,6 +93,15 @@ resource "aws_ecs_task_definition" "app" {
 
       firelensConfiguration = {
         type = "fluentbit"
+      }
+
+      # Verify the Fluent Bit process is alive; non-essential so a failure won't kill the task
+      healthCheck = {
+        command     = ["CMD-SHELL", "pgrep -x fluent-bit > /dev/null || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 10
       }
 
       # Fluent Bit's own logs go to CloudWatch via the awslogs driver
@@ -163,7 +173,7 @@ resource "aws_appautoscaling_policy" "scale_out_cpu" {
   service_namespace  = aws_appautoscaling_target.ecs.service_namespace
 
   target_tracking_scaling_policy_configuration {
-    target_value       = 70.0
+    target_value       = var.cpu_scale_threshold
     scale_in_cooldown  = 300
     scale_out_cooldown = 60
 
@@ -182,7 +192,7 @@ resource "aws_appautoscaling_policy" "scale_out_memory" {
   service_namespace  = aws_appautoscaling_target.ecs.service_namespace
 
   target_tracking_scaling_policy_configuration {
-    target_value       = 80.0
+    target_value       = var.memory_scale_threshold
     scale_in_cooldown  = 300
     scale_out_cooldown = 60
 

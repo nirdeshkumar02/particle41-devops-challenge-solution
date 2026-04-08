@@ -48,6 +48,18 @@ variable "max_capacity" {
   default     = 10
 }
 
+variable "cpu_scale_threshold" {
+  description = "Target CPU utilisation percentage that triggers scale-out (e.g. 70 = scale when avg CPU > 70%)"
+  type        = number
+  default     = 70
+}
+
+variable "memory_scale_threshold" {
+  description = "Target memory utilisation percentage that triggers scale-out (e.g. 80 = scale when avg memory > 80%)"
+  type        = number
+  default     = 80
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention period in days"
   type        = number

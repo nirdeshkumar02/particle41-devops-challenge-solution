@@ -1,6 +1,7 @@
 # SimpleTimeService — Particle41 DevOps Challenge
 
-A minimal microservice that returns the current timestamp and the visitor's IP address, containerised and deployed to AWS EKS via Terraform.
+A minimal microservice that returns the current UTC+5:30 timestamp and the visitor's IP address,
+containerised and deployed to AWS ECS Fargate via Terraform.
 
 ---
 
@@ -30,19 +31,18 @@ GET /health
 │   ├── main.py              # FastAPI microservice
 │   ├── requirements.txt     # Pinned dependencies
 │   └── Dockerfile           # Multi-stage Alpine build, non-root user
-└── terraform/
+└── terraform/               # Run terraform plan / apply from here
     ├── modules/
     │   ├── vpc/             # VPC, subnets, IGW, NAT Gateway, S3 endpoint
-    │   ├── security_groups/ # Cluster and node security groups
-    │   ├── iam/             # EKS cluster and node IAM roles
-    │   ├── eks/             # EKS cluster, OIDC provider, node group
-    │   ├── irsa/            # IAM Roles for Service Accounts
-    │   └── addons/          # VPC CNI, CoreDNS, kube-proxy, Metrics Server, LB Controller, Cluster Autoscaler
+    │   ├── security_groups/ # ALB and ECS task security groups
+    │   ├── iam/             # ECS task execution role and task role
+    │   ├── alb/             # Application Load Balancer, target group, listener
+    │   └── ecs/             # ECS cluster, Fargate task definition, service, autoscaling
     ├── main.tf
     ├── variables.tf
     ├── outputs.tf
     ├── locals.tf
-    ├── versions.tf          # Provider versions + S3 backend config
+    ├── versions.tf          # Provider versions + backend config
     └── terraform.tfvars     # Default variable values
 ```
 
@@ -63,7 +63,7 @@ GET /health
                           │  ┌──── us-east-1a ────┐  ┌──── us-east-1b ────┐   │
                           │  │  Private Subnet     │  │  Private Subnet     │   │
                           │  │  10.0.128.0/20      │  │  10.0.144.0/20      │   │
-                          │  │  [ EKS Nodes ]      │  │  [ EKS Nodes ]      │   │
+                          │  │  [ ECS Fargate ]    │  │  [ ECS Fargate ]    │   │
                           │  └─────────────────────┘  └─────────────────────┘   │
                           │           │                                          │
                           │      NAT GW ──► Internet  (image pulls, AWS APIs)   │
@@ -71,18 +71,48 @@ GET /health
                           └─────────────────────────────────────────────────────┘
 ```
 
+Each ECS task runs two containers:
+
+| Container | Role |
+|---|---|
+| `simpletimeservice` | FastAPI app — serves `/` and `/health` on port 8080 |
+| `log_router` (Fluent Bit) | Sidecar — collects stdout/stderr and ships to CloudWatch Logs |
+
 | Module | What it creates |
 |---|---|
 | `vpc` | VPC, 4 subnets (2 public + 2 private across 2 AZs), IGW, NAT Gateway, route tables, S3 VPC endpoint |
-| `security_groups` | Cluster SG (nodes → API server :443), Node SG (node-to-node + control plane + all outbound) |
-| `iam` | EKS cluster role, node group role with ECR, SSM, and CNI policies |
-| `eks` | EKS control plane (K8s 1.34), OIDC provider, managed node group in private subnets (min 2, max 5 nodes) |
-| `irsa` | Per-workload IAM roles via OIDC: VPC CNI, LB Controller, Cluster Autoscaler, CloudWatch Agent |
-| `addons` | VPC CNI, kube-proxy, CoreDNS (×2), Metrics Server, AWS LB Controller, Cluster Autoscaler |
+| `security_groups` | ALB SG (internet → :80), ECS task SG (ALB → :8080 + all outbound) |
+| `iam` | ECS task execution role (ECR pull + CloudWatch write), task role (Fluent Bit CloudWatch Logs) |
+| `alb` | Internet-facing ALB, listener on :80, target group with `/health` checks |
+| `ecs` | ECS cluster with Container Insights, Fargate task definition, ECS service, CPU/memory autoscaling |
 
-**Why EKS on AWS?**
+---
 
-EKS with managed node groups reflects what production teams typically run — full control over pod scheduling and node-level autoscaling. The ALB in public subnets terminates all inbound internet traffic; worker nodes have no public IPs. A single NAT Gateway handles outbound traffic from both private subnets, and an S3 VPC Gateway Endpoint routes ECR image pulls over the AWS backbone to avoid NAT charges.
+## Why ECS Fargate — not EKS or VM+Docker
+
+### ECS Fargate vs EKS (Kubernetes)
+
+| Concern | ECS Fargate | EKS |
+|---|---|---|
+| Operational overhead | None — no nodes, no kubelet, no node upgrades | High — node groups, add-ons, RBAC, CRDs |
+| Time to first deploy | ~3–5 min | ~20 min (control plane + node group) |
+| Cost at low scale | Pay per task CPU/mem only | ~$0.10/hr control plane + EC2 nodes always on |
+| AWS integration | Native — IAM task roles, CloudWatch, ALB, App Autoscaling | Requires IRSA, LB Controller, OIDC setup |
+| Right for this workload | ✅ Single stateless service, simple scaling | ❌ Overkill — no inter-service mesh, no custom scheduling |
+
+Kubernetes adds value when you need pod scheduling policies, custom operators, or a multi-service ecosystem. SimpleTimeService is a single stateless HTTP service — ECS Fargate covers every requirement without the operational overhead.
+
+### ECS Fargate vs VM + Docker
+
+| Concern | ECS Fargate | VM + Docker (EC2) |
+|---|---|---|
+| Node management | None — AWS manages the compute layer | You patch, rotate, and size EC2 instances |
+| High availability | Built-in — tasks spread across 2 AZs | Requires manual ASG + ELB wiring |
+| Autoscaling | App Autoscaling on CPU/memory — scales tasks | ASG scales VMs, not containers — slower and coarser |
+| Security surface | No SSH, no persistent host OS | SSH attack surface, shared host vulnerabilities |
+| Failed-task recovery | ECS service controller restarts failed tasks | Requires systemd / Docker restart policies |
+
+Running Docker on EC2 means owning the OS: patching, availability groups, log agent installation, and process supervision — all to run one container. Fargate removes that entirely.
 
 ---
 
@@ -107,11 +137,11 @@ docker stop simpletimeservice && docker rm simpletimeservice
 
 ### Public Image
 
-Each release publishes two tags to DockerHub:
+The image is published to DockerHub and runs as a non-root user (`nirdesh`, UID 1001):
 
 ```bash
 docker pull nirdeshkumar02/simpletimeservice:latest
-docker pull nirdeshkumar02/simpletimeservice:<version>
+docker pull nirdeshkumar02/simpletimeservice:<version>    # e.g. 1.0.0
 ```
 
 ---
@@ -124,7 +154,6 @@ docker pull nirdeshkumar02/simpletimeservice:<version>
 |---|---|---|
 | [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) | >= 2.x | `brew install awscli` |
 | [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.6.0 | `brew install terraform` |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | >= 1.29 | `brew install kubectl` |
 
 ### Step 1 — Configure AWS credentials
 
@@ -132,9 +161,11 @@ docker pull nirdeshkumar02/simpletimeservice:<version>
 aws configure
 ```
 
-The IAM principal needs permissions to create and manage: EKS, VPC, EC2, IAM, S3, and CloudWatch resources.
+The IAM principal needs permissions to create and manage: ECS, VPC, EC2, IAM, ALB, S3, and CloudWatch resources.
 
-### Step 2 — Create an S3 bucket for Terraform state
+### Step 2 — Create an S3 bucket for Terraform remote state
+
+This project uses an S3 backend for Terraform state and locking (extra credit). You must create your own bucket before running `terraform init`.
 
 ```bash
 aws s3api create-bucket --bucket <your-bucket-name> --region us-east-1
@@ -149,30 +180,31 @@ aws s3api put-bucket-encryption \
   '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 ```
 
-Then update the bucket name in `terraform/versions.tf`:
+Then update **one line** in `terraform/versions.tf` — replace the bucket name with yours:
 
 ```hcl
+# terraform/versions.tf
 backend "s3" {
-  bucket = "<your-bucket-name>"   # update this
-  key    = "eks/particle41/terraform.tfstate"
-  region = "us-east-1"
+  bucket = "<your-bucket-name>"   # ← change this
   ...
 }
 ```
 
-### Step 3 — Review variables
+### Step 3 — Review and adjust variables (optional)
 
-Key variables in `terraform/terraform.tfvars`:
+Open `terraform/terraform.tfvars` to review defaults. Key variables:
 
 | Variable | Default | Description |
 |---|---|---|
 | `aws_region` | `us-east-1` | AWS region |
-| `node_instance_type` | `m7i-flex.large` | EC2 type for worker nodes |
-| `node_min_size` | `2` | Minimum nodes |
-| `node_max_size` | `5` | Maximum nodes |
-| `cluster_version` | `1.34` | Kubernetes version |
-
-> For a cost-sensitive account, change `node_instance_type` to `t3.medium`.
+| `container_image` | `nirdeshkumar02/simpletimeservice:latest` | Image to deploy |
+| `task_cpu` | `256` | Fargate task CPU units (256 = 0.25 vCPU) |
+| `task_memory` | `512` | Fargate task memory (MiB) |
+| `desired_count` | `2` | Initial task replica count |
+| `min_capacity` | `2` | Autoscaling minimum |
+| `max_capacity` | `10` | Autoscaling maximum |
+| `cpu_scale_threshold` | `70` | Scale-out when avg CPU > this % |
+| `memory_scale_threshold` | `80` | Scale-out when avg memory > this % |
 
 ### Step 4 — Deploy
 
@@ -183,14 +215,19 @@ terraform plan
 terraform apply
 ```
 
-Deployment takes approximately 15–20 minutes.
+Deployment takes approximately 3–5 minutes. At the end, Terraform prints the application URL:
 
-### Step 5 — Configure kubectl
+```
+Outputs:
+
+app_url = "http://<alb-dns>.us-east-1.elb.amazonaws.com"
+```
+
+### Step 5 — Verify
 
 ```bash
-aws eks update-kubeconfig --region us-east-1 --name particle41-production-cluster --alias particle41-production
-
-kubectl get nodes
+curl $(terraform output -raw app_url)
+curl $(terraform output -raw app_url)/health
 ```
 
 ### Teardown
@@ -210,6 +247,8 @@ A GitHub Actions workflow runs on pull requests and releases.
 | Pull request to `main` | Build image → test `/` and `/health` endpoints → verify non-root user |
 | GitHub Release published | All of the above → push image to DockerHub as `:<version>` and `:latest` |
 
+Image tags follow the `nginx`-style convention — no `v` prefix (e.g. `1.0.0`, not `v1.0.0`).
+
 ### GitHub Secrets
 
 Go to **Settings → Secrets and variables → Actions** and add:
@@ -222,10 +261,9 @@ Go to **Settings → Secrets and variables → Actions** and add:
 ### Triggering a Release
 
 ```bash
-gh release create <version> --title "<version>" --notes "Release notes"
+gh release create v1.0.0 --title "v1.0.0" --notes "Initial release"
+# Published to DockerHub as simpletimeservice:1.0.0 and simpletimeservice:latest
 ```
-
-Example: `gh release create v1.0.0 --title "v1.0.0" --notes "Initial release"`
 
 ---
 
@@ -233,11 +271,12 @@ Example: `gh release create v1.0.0 --title "v1.0.0" --notes "Initial release"`
 
 | Feature | Implementation |
 |---|---|
-| Non-root container | Runs as `nirdesh` (UID 1001) |
+| Non-root container | Runs as `nirdesh` (UID 1001) — enforced both in Dockerfile and ECS task definition |
 | Multi-arch image | Built for `linux/amd64` and `linux/arm64` |
-| Remote Terraform state | S3 backend with encryption and native locking |
-| IRSA | Fine-grained IAM roles per workload via OIDC |
-| Cluster Autoscaler | Scales nodes 2 → 5 based on pending pods |
-| AWS Load Balancer Controller | Provisions ALBs from Kubernetes Ingress resources |
+| Remote Terraform state | Optional S3 backend with encryption and native locking (see above) |
+| Fargate autoscaling | Scales tasks 2 → 10 based on configurable CPU and memory thresholds |
+| Health checks | Container-level health check on `/health`; ALB target group health check |
+| Fluent Bit sidecar | Structured log routing to CloudWatch Logs via FireLens |
+| Container Insights | ECS cluster-level CPU, memory, and network metrics in CloudWatch |
 | CI/CD pipeline | GitHub Actions — build, test, and push on release |
-| S3 VPC Gateway Endpoint | ECR image pulls bypass NAT Gateway (free) |
+| S3 VPC Gateway Endpoint | ECR image pulls bypass NAT Gateway (free path) |
