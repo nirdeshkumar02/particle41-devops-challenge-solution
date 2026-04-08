@@ -278,10 +278,7 @@ aws s3api put-bucket-encryption --bucket <your-unique-bucket-name> --server-side
     }]
   }'
 
-# 4. Block all public access — state files must never be publicly readable
-aws s3api put-public-access-block --bucket <your-unique-bucket-name> / --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
-
-# 5. Update `terraform/backend.tf` with your bucket name, then verify the change
+# 4. Update `terraform/backend.tf` with your bucket name, then verify the change
 terraform {
   backend "s3" {
     bucket       = <your-unique-bucket-name>
