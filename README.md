@@ -55,8 +55,7 @@ The container runs as a non-root user (`nirdesh`, UID 1000) and is published to 
 │       └── ecs/           # Local module: ECS cluster, task definition, service, autoscaling
 ├── .github/
 │   ├── actions/
-│   │   ├── docker-setup/      # Composite: Buildx + optional DockerHub login
-│   │   └── terraform-setup/   # Composite: Terraform + AWS credentials + init
+│   │   └── docker-setup/      # Composite: Buildx + optional DockerHub login
 │   └── workflows/
 │       └── docker-publish.yml # CI/CD pipeline
 └── docs/
@@ -87,55 +86,6 @@ GET /health
 ## 2. Architecture Diagram
 
 ![Architecture Diagram](docs/architecture.png)
-
-```
-                         Internet
-                             │
-                       HTTP :80
-                             │
-              ┌──────────────▼──────────────┐
-              │  particle41-production-alb  │  ← GREEN: ALB (public subnets)
-              │  listener: HTTP :80         │
-              │  target: GET /health        │
-              └──────────────┬──────────────┘
-                             │
-     ╔═══════════════════════╪══════════════════════════╗
-     ║    VPC: 10.0.0.0/16   │   (us-east-1)            ║
-     ║                       │                          ║
-     ║  PUBLIC SUBNETS                                  ║
-     ║  us-east-1a: 10.0.0.0/20                        ║
-     ║  us-east-1b: 10.0.16.0/20                       ║
-     ║  [ALB nodes]  [NAT Gateway — single, in 1a]     ║
-     ║                       │                          ║
-     ║  ┌────────────────────┴──────────────────────┐  ║
-     ║  │         PRIVATE SUBNETS                   │  ║
-     ║  │                                           │  ║
-     ║  │  us-east-1a: 10.0.128.0/20               │  ║
-     ║  │  ┌─────────────────────────────────────┐ │  ║
-     ║  │  │  ECS Fargate Task                   │ │  ║
-     ║  │  │  ┌──────────────────────────────┐   │ │  ║
-     ║  │  │  │ simpletimeservice  :8080      │   │ │  ║  ← ORANGE: Compute
-     ║  │  │  │ cpu=192  memory=384 MiB       │   │ │  ║
-     ║  │  │  └──────────────────────────────┘   │ │  ║
-     ║  │  │  ┌──────────────────────────────┐   │ │  ║
-     ║  │  │  │ log_router (Fluent Bit)       │   │ │  ║  ← PURPLE: Observability
-     ║  │  │  │ cpu=64    memory=128 MiB      │   │ │  ║
-     ║  │  │  └────────────────┬─────────────┘   │ │  ║
-     ║  │  └───────────────────┼─────────────────┘ │  ║
-     ║  │                      │                    │  ║
-     ║  │  us-east-1b: 10.0.144.0/20               │  ║
-     ║  │  (identical ECS task replicated here)     │  ║
-     ║  └──────────────────────┼────────────────────┘  ║
-     ║                         │                        ║
-     ╚═════════════════════════╪════════════════════════╝
-                               ▼
-                    ┌──────────────────────┐
-                    │   CloudWatch Logs    │  ← PURPLE: Observability
-                    │  /ecs/particle41-    │
-                    │  production          │
-                    │  (7-day retention)   │
-                    └──────────────────────┘
-```
 
 **Traffic flow in plain English:**
 A browser or curl request hits the internet-facing ALB (`particle41-production-alb`) on port 80.
@@ -676,9 +626,8 @@ docker run -d --name simpletimeservice -p 8080:8080 nirdeshkumar02/simpletimeser
 ## 10. GitHub Actions CI/CD Setup
 
 The pipeline lives in [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml).
-It uses two reusable composite actions — [docker-setup](.github/actions/docker-setup/action.yml)
-and [terraform-setup](.github/actions/terraform-setup/action.yml) — to avoid duplicating
-Buildx and credential setup across jobs.
+It uses a reusable composite action — [docker-setup](.github/actions/docker-setup/action.yml)
+— to avoid duplicating Buildx setup and DockerHub login across the three jobs.
 
 ### One-time Setup: Add Repository Secrets
 
@@ -870,8 +819,8 @@ item or an additional production enhancement.
   `push-release` (GitHub Releases)
 - Path filter `app/**` prevents unnecessary runs when only Terraform files change
 - Multi-arch builds: `platforms: linux/amd64,linux/arm64` via `docker/build-push-action@v6`
-- Two reusable composite actions: `.github/actions/docker-setup/` and
-  `.github/actions/terraform-setup/` avoid duplicating Buildx + credential setup
+- Reusable composite action `.github/actions/docker-setup/` avoids duplicating Buildx
+  setup and DockerHub login across all three jobs
 
 ---
 
@@ -997,7 +946,7 @@ expire automatically.
   }
 }
 ```
-3. Replace the `terraform-setup` composite action's credential inputs with:
+3. In your workflow, replace static credential env vars with:
 ```yaml
 - uses: aws-actions/configure-aws-credentials@v4
   with:
