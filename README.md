@@ -153,7 +153,7 @@ You need the following tools installed on your local machine before deploying.
 
 ---
 
-**Terraform v1.6.0 or higher**
+**Terraform v1.10.0 or higher**
 Used to provision all AWS infrastructure declaratively — VPC, ECS, ALB, IAM, CloudWatch.
 → Download: https://developer.hashicorp.com/terraform/install
 → Verify: `terraform version`
@@ -302,6 +302,12 @@ Once the bucket exists, proceed to the Deployment Instructions below.
 ---
 
 ## 7. Deployment Instructions
+
+> **Cost estimate:** At default settings (2 Fargate tasks at 0.25 vCPU / 512 MiB each, single
+> NAT Gateway, one ALB) in us-east-1, this deployment costs approximately **$3–6 USD per day**.
+> Run `terraform destroy` when done to stop all charges. The S3 backend bucket created in
+> Section 6 is not managed by Terraform and will not be destroyed automatically — see
+> [Section 14 — Cleanup](#14-cleanup) for the full cleanup sequence.
 
 ### Step 1 — Clone the repository
 
@@ -753,7 +759,7 @@ item or an additional production enhancement.
 
 **Trivy image vulnerability scan** — *Additional production enhancement*
 - **File:** `.github/workflows/ci-cd.yml` · **Step:** `Security scan (Trivy)` in `build-and-test`
-- **Config:** `aquasecurity/trivy-action@v0.20.0`, `severity: HIGH,CRITICAL`
+- **Config:** `aquasecurity/trivy-action@v0.20.0`, `severity: CRITICAL`
 - Runs on every push and PR — the pipeline fails immediately if the built image contains any
   `HIGH` or `CRITICAL` CVE. The scan targets the locally-built `:test` image so no DockerHub
   push is needed to gate on image quality.
@@ -938,6 +944,15 @@ cd terraform/
 
 # Destroy all resources — Terraform will prompt you to type "yes" to confirm
 terraform destroy
+```
+
+> **Note:** `terraform destroy` removes all resources managed by Terraform (ECS, ALB, VPC, IAM
+> roles, CloudWatch log group). It does **not** delete the S3 backend bucket, which was created
+> manually in Section 6. Delete it separately to avoid ongoing storage charges:
+
+```bash
+# Replace <your-unique-bucket-name> with the bucket name you used in Section 6
+aws s3 rb s3://<your-unique-bucket-name> --force
 ```
 
 

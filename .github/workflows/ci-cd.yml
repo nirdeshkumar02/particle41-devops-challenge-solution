@@ -74,7 +74,7 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker rm -f app || true
+        run: docker rm -f simpletimeservice || true
 
 
 # ======================================
@@ -101,11 +101,6 @@ jobs:
 
       - name: Terraform validate
         run: terraform validate
-        working-directory: ${{ env.TF_DIR }}
-
-      - name: Terraform plan (PR only)
-        if: github.event_name == 'pull_request'
-        run: terraform plan
         working-directory: ${{ env.TF_DIR }}
 
 
