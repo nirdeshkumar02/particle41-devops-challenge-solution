@@ -312,12 +312,12 @@ Once the bucket exists, proceed to the Deployment Instructions below.
 
 ```bash
 git clone https://github.com/nirdeshkumar02/particle41-devops-challenge-solution.git
-cd particle41-devops-challenge-solution
+cd particle41-devops-challenge-solution/terraform
 ```
 
-### Step 2 — Review and update `terraform/backend.tf`
+### Step 2 — Review and update `backend.tf`
 
-Open `terraform/backend.tf` and confirm the `bucket` value matches the bucket you created
+Open `backend.tf` and confirm the `bucket` value matches the bucket you created
 in the Bootstrap section above. Everything else in this file can stay as-is.
 
 ```hcl
@@ -330,11 +330,11 @@ backend "s3" {
 }
 ```
 
-### Step 3 — Review `terraform/terraform.tfvars`
+### Step 3 — Review `terraform.tfvars`
 
 All variables are defined with sensible defaults and are fully documented below. You can override any value before deployment as needed. The most commonly updated variable is `container_image`, especially if you want to deploy your own image instead of the default pre-built one.
 
-All input variables are declared in [terraform/variables.tf](terraform/variables.tf), and their corresponding values are defined in [terraform/terraform.tfvars](terraform/terraform.tfvars). Update the `terraform.tfvars` file to customize the deployment as required.
+All input variables are declared in [variables.tf](variables.tf), and their corresponding values are defined in [terraform.tfvars](terraform.tfvars). Update the `terraform.tfvars` file to customize the deployment as required.
 
 | Variable | Value in tfvars | Description |
 |---|---|---|
@@ -373,7 +373,6 @@ Registry: `vpc`, `security-group`, `iam`, and `alb`. Run this once per checkout 
 any time you change provider or module versions.
 
 ```bash
-cd terraform
 terraform init
 ```
 
@@ -421,7 +420,7 @@ Do you want to perform these actions?
 Type `yes` and press Enter. Deployment takes approximately **5–8 minutes** — most of the
 time is spent waiting for the ALB and NAT Gateway to become active.
 
-> **Automation tip:** If you had reviewed the plan earlier; you can skip the confirmation prompt with `terraform apply -auto-approve`. Do **not** use this flag interactively — you will not get a chance to review what will be destroyed or changed before it happens.
+> **Automation tip:** If you had reviewed the plan earlier; you can skip the confirmation prompt with `terraform apply --auto-approve`. Do **not** use this flag interactively — you will not get a chance to review what will be destroyed or changed before it happens.
 
 ### Step 7 — Retrieve the application URL
 
