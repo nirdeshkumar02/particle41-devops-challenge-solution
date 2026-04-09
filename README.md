@@ -596,11 +596,11 @@ The workflow file declares `paths: ['app/**']` for push and pull_request events,
 the pipeline only runs when files inside the `app/` directory change. Changing only Terraform
 files does **not** trigger a build.
 
-| Event | Path filter | Jobs that run | Tags pushed to DockerHub |
-|---|---|---|---|
-| Pull request to `main` | `app/**` | `build-and-test` only | None — CI gates without publishing |
-| Push to `main` | `app/**` | `build-and-test` → `push-main` | `:<7-char-git-sha>` (e.g. `:a3f92c1`) |
-| GitHub Release published | *(any file)* | `build-and-test` → `push-release` | `:<semver>` **and** `:latest` |
+| Event | Path filter | Jobs that run | Tags pushed to DockerHub | Usage |
+|---|---|---|---|---|
+| Pull request to `main` | `app/**` | `build-and-test` only | None — CI gates without publishing | NO |
+| Push to `main` | `app/**` | `build-and-test` → `push-main` | `:<7-char-git-sha>` **and** `:main`  | Staging/Development |
+| GitHub Release published | *(any file)* | `build-and-test` → `push-release` | `:<version>` **and** `:latest` | Production |
 
 ### What the `build-and-test` Job Validates
 
