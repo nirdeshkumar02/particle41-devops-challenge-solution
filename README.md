@@ -416,8 +416,7 @@ Do you want to perform these actions?
 Type `yes` and press Enter. Deployment takes approximately **5–8 minutes** — most of the
 time is spent waiting for the ALB and NAT Gateway to become active.
 
-> **Automation tip:** If you had reviewed the plan earlier; you can skip the confirmation prompt
-> with `terraform apply -auto-approve`. Do **not** use this flag interactively — you will not get a > chance to review what will be destroyed or changed before it happens.
+> **Automation tip:** If you had reviewed the plan earlier; you can skip the confirmation prompt with `terraform apply -auto-approve`. Do **not** use this flag interactively — you will not get a chance to review what will be destroyed or changed before it happens.
 
 ### Step 7 — Retrieve the application URL
 
@@ -623,8 +622,7 @@ Every pipeline run — including PRs — must pass these checks before any image
 2. **Health check** — `curl http://localhost:8080/health` output must contain `"ok"`
 3. **Non-root enforcement** — `docker exec simpletimeservice whoami` must return `nirdesh`
    (the pipeline fails with exit 1 if it returns `root`)
-4. **Trivy security scan** — `aquasecurity/trivy-action@v0.20.0` scans the built image and fails the
-   job if any `HIGH` or `CRITICAL` CVEs are found (see [Extra Credit Features](#12-extra-credit-features))
+4. **Trivy security scan** — `aquasecurity/trivy-action@v0.20.0` scans the built image and `CRITICAL` CVEs are found (see [Extra Credit Features](#12-extra-credit-features))
 
 ### Verifying a Pipeline Run
 
@@ -642,30 +640,33 @@ docker inspect nirdeshkumar02/simpletimeservice:<7-char-sha> | grep -A2 '"User"'
 
 ### Creating a Versioned Release
 
-Use date-based or semantic versioning. Both methods push `:<version>` **and** `:latest` to DockerHub.
+Using semantic versioning: this method pushes `:<version>` **and** `:latest` to DockerHub.
 
 ```bash
-# Option A — date-based versioning (good for regular releases)
-git tag -a "v$(date +%Y.%m.%d)" -m "Release $(date +%Y.%m.%d)"
-git push origin "v$(date +%Y.%m.%d)"
+# Set your version once — reused in every command below
+VERSION="1.0.0"
 
-# Option B — semantic versioning (good for feature milestones)
-git tag -a v1.0.0 -m "Initial production release"
-git push origin v1.0.0
+# Create an annotated tag and push it
+git tag -a "v${VERSION}" -m "Release v${VERSION}"
+git push origin "v${VERSION}"
+
+# Create the GitHub Release from the tag, triggering the push-release CI/CD job
+gh release create "v${VERSION}" --title "v${VERSION}" --notes "Release v${VERSION}"
 ```
 
-After the tag is pushed, GitHub automatically detects it and — if you also create a GitHub
-Release from it — the `push-release` job fires. To create the Release from the CLI:
+**Example** — tagging and releasing `v1.2.3`:
 
 ```bash
-# Creates the GitHub Release from the existing tag, triggering the CI/CD pipeline
-gh release create v1.0.0 --title "v1.0.0" --notes "Initial production release"
+VERSION="1.2.3"
+git tag -a "v${VERSION}" -m "Release v${VERSION}"
+git push origin "v${VERSION}"
+gh release create "v${VERSION}" --title "v${VERSION}" --notes "Release v${VERSION}"
 ```
 
-The resulting DockerHub tags for a `v1.0.0` release:
+The resulting DockerHub tags for a `v1.2.3` release:
 
 ```
-nirdeshkumar02/simpletimeservice:1.0.0   ← version tag (stripped of 'v' prefix)
+nirdeshkumar02/simpletimeservice:1.2.3   ← version tag (stripped of 'v' prefix)
 nirdeshkumar02/simpletimeservice:latest  ← floating latest pointer
 ```
 
