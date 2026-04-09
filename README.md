@@ -334,7 +334,7 @@ backend "s3" {
 
 All variables are defined with sensible defaults and are fully documented below. You can override any value before deployment as needed. The most commonly updated variable is `container_image`, especially if you want to deploy your own image instead of the default pre-built one.
 
-All input variables are declared in [variables.tf](variables.tf), and their corresponding values are defined in [terraform.tfvars](terraform.tfvars). Update the `terraform.tfvars` file to customize the deployment as required.
+All input variables are declared in [terraform/variables.tf](variables.tf), and their corresponding values are defined in [terraform/terraform.tfvars](terraform.tfvars). Update the `terraform.tfvars` file to customize the deployment as required.
 
 | Variable | Value in tfvars | Description |
 |---|---|---|
