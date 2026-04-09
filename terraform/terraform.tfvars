@@ -9,7 +9,7 @@ availability_zones   = ["us-east-1a", "us-east-1b"]
 public_subnet_cidrs  = ["10.0.0.0/20", "10.0.16.0/20"]
 private_subnet_cidrs = ["10.0.128.0/20", "10.0.144.0/20"]
 
-container_image   = "nirdeshkumar02/simpletimeservice:0.0.4"
+container_image   = "nirdeshkumar02/simpletimeservice:0.0.1"
 container_port    = 8080
 health_check_path = "/health"
 
