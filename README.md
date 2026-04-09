@@ -45,7 +45,7 @@ The container runs as a non-root user (`nirdesh`, UID 1000) and is published to 
 │   └── Dockerfile         # Multi-stage build, non-root user, HEALTHCHECK
 ├── terraform/
 │   ├── backend.tf         # S3 remote state — dev-nird-tf-bucket
-│   ├── providers.tf       # AWS provider ~> 5.80, Terraform >= 1.6.0
+│   ├── providers.tf       # AWS provider ~> 5.80, Terraform >= 1.10.0
 │   ├── main.tf            # Root module — VPC, ALB, IAM, ECS wired together
 │   ├── locals.tf          # Derived names: particle41-production, -cluster
 │   ├── variables.tf       # 18 input variables with descriptions and defaults
@@ -618,7 +618,6 @@ Every pipeline run — including PRs — runs Terraform validation:
 1. **`terraform fmt -check -recursive`** — fails if any `.tf` file is not properly formatted
 2. **`terraform init -backend=false`** — downloads providers without connecting to the S3 backend
 3. **`terraform validate`** — checks configuration syntax and internal consistency
-4. **`terraform plan`** (PRs only) — previews infrastructure changes; requires AWS credentials configured as secrets
 
 ### What the `build-and-test` Job Validates
 
@@ -761,7 +760,7 @@ item or an additional production enhancement.
 - **File:** `.github/workflows/ci-cd.yml` · **Step:** `Security scan (Trivy)` in `build-and-test`
 - **Config:** `aquasecurity/trivy-action@v0.20.0`, `severity: CRITICAL`
 - Runs on every push and PR — the pipeline fails immediately if the built image contains any
-  `HIGH` or `CRITICAL` CVE. The scan targets the locally-built `:test` image so no DockerHub
+  `CRITICAL` CVE. The scan targets the locally-built `:test` image so no DockerHub
   push is needed to gate on image quality.
 
 ---
